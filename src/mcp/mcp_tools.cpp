@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -23,6 +24,7 @@
 #include "mcp_queue.h"
 
 #include "bios.h"
+#include "keyboard.h"
 #include "mem.h"
 
 namespace mcp_bridge {
@@ -90,31 +92,109 @@ uint32_t resolve_address(const nlohmann::json& args)
 	        "must provide either 'address' or both 'segment' and 'offset'");
 }
 
-// Minimal key-name → BIOS (scancode<<8 | ascii) map. Extend as needed.
+// Map of key name → (KBD_KEYS scancode, BIOS ascii, needs_shift). Used by
+// both BIOS-buffer injection (legacy path) and the hardware-emulation
+// path via KEYBOARD_AddKey.
 struct KeyEntry {
-	uint8_t scancode;
-	uint8_t ascii;
+	KBD_KEYS kbd;
+	uint8_t  bios_scancode;
+	uint8_t  ascii;
+	bool     shift;
 };
+
 const std::unordered_map<std::string, KeyEntry>& key_table()
 {
 	static const std::unordered_map<std::string, KeyEntry> t = {
-	        {"enter", {0x1c, 0x0d}},   {"return", {0x1c, 0x0d}},
-	        {"esc", {0x01, 0x1b}},     {"escape", {0x01, 0x1b}},
-	        {"space", {0x39, 0x20}},   {"tab", {0x0f, 0x09}},
-	        {"backspace", {0x0e, 0x08}},
-	        {"up", {0x48, 0x00}},      {"down", {0x50, 0x00}},
-	        {"left", {0x4b, 0x00}},    {"right", {0x4d, 0x00}},
-	        {"home", {0x47, 0x00}},    {"end", {0x4f, 0x00}},
-	        {"pageup", {0x49, 0x00}},  {"pagedown", {0x51, 0x00}},
-	        {"insert", {0x52, 0x00}},  {"delete", {0x53, 0x00}},
-	        {"f1", {0x3b, 0x00}},      {"f2", {0x3c, 0x00}},
-	        {"f3", {0x3d, 0x00}},      {"f4", {0x3e, 0x00}},
-	        {"f5", {0x3f, 0x00}},      {"f6", {0x40, 0x00}},
-	        {"f7", {0x41, 0x00}},      {"f8", {0x42, 0x00}},
-	        {"f9", {0x43, 0x00}},      {"f10", {0x44, 0x00}},
-	        {"f11", {0x57, 0x00}},     {"f12", {0x58, 0x00}},
+	        {"enter",     {KBD_enter,     0x1c, 0x0d, false}},
+	        {"return",    {KBD_enter,     0x1c, 0x0d, false}},
+	        {"esc",       {KBD_esc,       0x01, 0x1b, false}},
+	        {"escape",    {KBD_esc,       0x01, 0x1b, false}},
+	        {"space",     {KBD_space,     0x39, 0x20, false}},
+	        {"tab",       {KBD_tab,       0x0f, 0x09, false}},
+	        {"backspace", {KBD_backspace, 0x0e, 0x08, false}},
+	        {"up",        {KBD_up,        0x48, 0x00, false}},
+	        {"down",      {KBD_down,      0x50, 0x00, false}},
+	        {"left",      {KBD_left,      0x4b, 0x00, false}},
+	        {"right",     {KBD_right,     0x4d, 0x00, false}},
+	        {"home",      {KBD_home,      0x47, 0x00, false}},
+	        {"end",       {KBD_end,       0x4f, 0x00, false}},
+	        {"pageup",    {KBD_pageup,    0x49, 0x00, false}},
+	        {"pagedown",  {KBD_pagedown,  0x51, 0x00, false}},
+	        {"insert",    {KBD_insert,    0x52, 0x00, false}},
+	        {"delete",    {KBD_delete,    0x53, 0x00, false}},
+	        {"f1",  {KBD_f1,  0x3b, 0x00, false}}, {"f2",  {KBD_f2,  0x3c, 0x00, false}},
+	        {"f3",  {KBD_f3,  0x3d, 0x00, false}}, {"f4",  {KBD_f4,  0x3e, 0x00, false}},
+	        {"f5",  {KBD_f5,  0x3f, 0x00, false}}, {"f6",  {KBD_f6,  0x40, 0x00, false}},
+	        {"f7",  {KBD_f7,  0x41, 0x00, false}}, {"f8",  {KBD_f8,  0x42, 0x00, false}},
+	        {"f9",  {KBD_f9,  0x43, 0x00, false}}, {"f10", {KBD_f10, 0x44, 0x00, false}},
+	        {"f11", {KBD_f11, 0x57, 0x00, false}}, {"f12", {KBD_f12, 0x58, 0x00, false}},
 	};
 	return t;
+}
+
+// Map an ASCII char to a KBD key, with shift flag for uppercase / shifted
+// symbols. Returns nullopt for chars we don't have a hardware mapping for
+// (caller can fall back to BIOS-buffer injection).
+struct AsciiKey {
+	KBD_KEYS kbd;
+	bool     shift;
+	uint8_t  bios_scancode;
+};
+
+std::optional<AsciiKey> ascii_to_kbd(char c)
+{
+	auto digit = [](KBD_KEYS k, uint8_t sc) {
+		return AsciiKey{k, false, sc};
+	};
+	auto letter = [](KBD_KEYS k, uint8_t sc, bool sh) {
+		return AsciiKey{k, sh, sc};
+	};
+	switch (c) {
+	case '\r': case '\n': return AsciiKey{KBD_enter,     false, 0x1c};
+	case ' ':  return AsciiKey{KBD_space,     false, 0x39};
+	case '\t': return AsciiKey{KBD_tab,       false, 0x0f};
+	case '\b': return AsciiKey{KBD_backspace, false, 0x0e};
+	case '0':  return digit(KBD_0, 0x0b);
+	case '1':  return digit(KBD_1, 0x02);
+	case '2':  return digit(KBD_2, 0x03);
+	case '3':  return digit(KBD_3, 0x04);
+	case '4':  return digit(KBD_4, 0x05);
+	case '5':  return digit(KBD_5, 0x06);
+	case '6':  return digit(KBD_6, 0x07);
+	case '7':  return digit(KBD_7, 0x08);
+	case '8':  return digit(KBD_8, 0x09);
+	case '9':  return digit(KBD_9, 0x0a);
+	}
+	if (c >= 'a' && c <= 'z') {
+		static const KBD_KEYS letters[] = {
+		    KBD_a, KBD_b, KBD_c, KBD_d, KBD_e, KBD_f, KBD_g, KBD_h,
+		    KBD_i, KBD_j, KBD_k, KBD_l, KBD_m, KBD_n, KBD_o, KBD_p,
+		    KBD_q, KBD_r, KBD_s, KBD_t, KBD_u, KBD_v, KBD_w, KBD_x,
+		    KBD_y, KBD_z,
+		};
+		static const uint8_t scancodes[] = {
+		    0x1e, 0x30, 0x2e, 0x20, 0x12, 0x21, 0x22, 0x23,
+		    0x17, 0x24, 0x25, 0x26, 0x32, 0x31, 0x18, 0x19,
+		    0x10, 0x13, 0x1f, 0x14, 0x16, 0x2f, 0x11, 0x2d,
+		    0x15, 0x2c,
+		};
+		const int idx = c - 'a';
+		return letter(letters[idx], scancodes[idx], false);
+	}
+	if (c >= 'A' && c <= 'Z') {
+		auto k = ascii_to_kbd(static_cast<char>(c - 'A' + 'a'));
+		if (k) k->shift = true;
+		return k;
+	}
+	return std::nullopt;
+}
+
+void press_kbd_key(KBD_KEYS k, bool shift)
+{
+	if (shift) KEYBOARD_AddKey(KBD_leftshift, true);
+	KEYBOARD_AddKey(k, true);
+	KEYBOARD_AddKey(k, false);
+	if (shift) KEYBOARD_AddKey(KBD_leftshift, false);
 }
 
 uint16_t key_name_to_code(const std::string& key)
@@ -128,16 +208,12 @@ uint16_t key_name_to_code(const std::string& key)
 	const auto& tbl = key_table();
 	auto it         = tbl.find(lower);
 	if (it != tbl.end()) {
-		return (static_cast<uint16_t>(it->second.scancode) << 8)
+		return (static_cast<uint16_t>(it->second.bios_scancode) << 8)
 		       | it->second.ascii;
 	}
 	if (key.size() == 1) {
-		// Single ASCII char. Scancode of 0 is good enough for INT 16h
-		// AH=0 callers; games that look at scancode may need more but
-		// Civ I doesn't.
 		return static_cast<uint16_t>(static_cast<unsigned char>(key[0]));
 	}
-	// Numeric scancode|ascii passed as decimal or hex.
 	try {
 		size_t pos = 0;
 		auto v     = static_cast<unsigned long>(
@@ -307,10 +383,38 @@ nlohmann::json tool_send_key_main_thread(const nlohmann::json& args)
 	if (!args.contains("key")) {
 		throw std::invalid_argument("missing 'key'");
 	}
-	uint16_t code = key_name_to_code(args["key"].get<std::string>());
+	const auto key = args["key"].get<std::string>();
+	std::string lower;
+	lower.reserve(key.size());
+	for (char c : key) {
+		lower.push_back(static_cast<char>(std::tolower(
+		        static_cast<unsigned char>(c))));
+	}
+
+	const auto& tbl = key_table();
+	const auto it   = tbl.find(lower);
+	if (it != tbl.end()) {
+		// Hardware-emulation path: simulate a real key press at the
+		// keyboard controller. Reaches games that read scancodes
+		// directly via port 0x60 (most graphics-mode DOS games do
+		// this); the BIOS keyboard buffer also gets populated as a
+		// side effect of the keyboard ISR.
+		press_kbd_key(it->second.kbd, it->second.shift);
+		return {{"ok", true}, {"key", lower}};
+	}
+	if (key.size() == 1) {
+		auto ak = ascii_to_kbd(key[0]);
+		if (ak) {
+			press_kbd_key(ak->kbd, ak->shift);
+			return {{"ok", true}, {"key", key}};
+		}
+	}
+	// Unknown name: fall back to the legacy BIOS-buffer injection so
+	// numeric scancode|ascii values still work.
+	uint16_t code = key_name_to_code(key);
 	bool ok       = BIOS_AddKeyToBuffer(code);
-	return {{"ok", ok},
-	        {"code", static_cast<uint32_t>(code)}};
+	return {{"ok", ok}, {"code", static_cast<uint32_t>(code)},
+	        {"via", "bios"}};
 }
 
 nlohmann::json tool_send_keys_main_thread(const nlohmann::json& args)
@@ -321,9 +425,15 @@ nlohmann::json tool_send_keys_main_thread(const nlohmann::json& args)
 	const auto text = args["text"].get<std::string>();
 	uint32_t accepted = 0;
 	for (char c : text) {
+		auto ak = ascii_to_kbd(c);
+		if (ak) {
+			press_kbd_key(ak->kbd, ak->shift);
+			++accepted;
+			continue;
+		}
+		// Fallback: BIOS-buffer for chars without a hardware mapping.
 		uint16_t code = static_cast<uint16_t>(
 		        static_cast<unsigned char>(c));
-		// Translate \n into Enter (Civ menus expect 0x1c0d, not 0x000a).
 		if (c == '\n' || c == '\r') {
 			code = (0x1c << 8) | 0x0d;
 		}
