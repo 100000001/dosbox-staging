@@ -20,8 +20,8 @@ libmcp_incdir = include_directories(
 # Match cpp-mcp's CMake defaults; without these its mcp_server.cpp
 # fails to compile.
 libmcp_cpp_args = [
-    '-DMCP_MAX_SESSIONS=10',
-    '-DMCP_SESSION_TIMEOUT=30',
+    '-DMCP_MAX_SESSIONS=100',
+    '-DMCP_SESSION_TIMEOUT=600',
 ]
 
 libmcp = static_library(
@@ -29,7 +29,7 @@ libmcp = static_library(
     libmcp_sources,
     include_directories: [incdir, libmcp_incdir],
     cpp_args: libmcp_cpp_args,
-    dependencies: [png_dep],
+    dependencies: [png_dep, sdl2_dep],
 )
 
 libmcp_dep = declare_dependency(

@@ -4111,6 +4111,16 @@ bool GFX_Events()
 						// WaitEvent waits for an event rather than polling, so CPU usage drops to zero
 						SDL_WaitEvent(&ev);
 
+#if C_MCP
+						// Pump the MCP queue too, so MCP tools keep
+						// responding while the window is in the
+						// inactive-pause loop. submit_and_wait posts
+						// an SDL_USEREVENT to break us out of
+						// SDL_WaitEvent above; we drain the resulting
+						// jobs here.
+						MCP_PumpQueue();
+#endif
+
 						switch (ev.type) {
 						case SDL_QUIT:
 							GFX_RequestExit(true);

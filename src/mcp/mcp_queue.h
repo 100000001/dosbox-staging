@@ -16,6 +16,8 @@
 #include <queue>
 #include <utility>
 
+#include <SDL.h>
+
 #include "mcp_third_party.h"
 
 namespace mcp_bridge {
@@ -39,6 +41,14 @@ public:
 			pending_.emplace(std::move(job), promise);
 		}
 		cv_.notify_one();
+		// Wake the main thread if it's parked in SDL_WaitEvent. DOSBox
+		// uses SDL_WaitEventTimeout when emulation has nothing to do
+		// (e.g. CPU at INT 16h waiting for a keystroke). Without this,
+		// MCP_PumpQueue() at the top of DOSBOX_RunMachine never gets to
+		// run and the worker thread blocks indefinitely on the future.
+		SDL_Event wake = {};
+		wake.type      = SDL_USEREVENT;
+		SDL_PushEvent(&wake);
 		return future.get();
 	}
 
