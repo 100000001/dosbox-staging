@@ -445,10 +445,35 @@ void DOSBOX_SetNormalLoop() {
 	loop=Normal_Loop;
 }
 
+#if C_MCP
+#include "mcp/mcp_bridge.h"
+#include <SDL.h>
+#endif
+
 void DOSBOX_RunMachine()
 {
-	while ((*loop)() == 0 && !shutdown_requested)
-		;
+	while (!shutdown_requested) {
+#if C_MCP
+		// Drain MCP requests every iteration, paused or not. Doing
+		// this only on the running path would deadlock: the very
+		// `resume` request would never run because the pump only
+		// fires when the CPU is advancing.
+		MCP_PumpQueue();
+		if (MCP_IsPaused()) {
+			// Keep the host window responsive (window dragging,
+			// quit events, mapper hotkeys) while the CPU is
+			// frozen, then yield. 2ms is short enough that a
+			// `resume` from the agent feels instant but long
+			// enough to not pin a CPU core.
+			(void)GFX_Events();
+			SDL_Delay(2);
+			continue;
+		}
+#endif
+		if ((*loop)() != 0) {
+			break;
+		}
+	}
 }
 
 static void DOSBOX_UnlockSpeed( bool pressed ) {

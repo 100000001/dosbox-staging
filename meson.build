@@ -1298,6 +1298,11 @@ subdir('src/ints')
 subdir('src/midi')
 subdir('src/shell')
 
+if get_option('mcp').enabled()
+    subdir('src/mcp')
+    conf_data.set('C_MCP', 1)
+endif
+
 # debugger-specific libs
 if get_option('enable_debugger') != 'none'
     subdir('src/libs/PDCurses')

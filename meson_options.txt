@@ -253,3 +253,11 @@ option(
     value: false,
     description: 'Time build events, for use with the Clang Build Analyzer tool',
 )
+
+option(
+    'mcp',
+    type: 'feature',
+    value: 'enabled',
+    description: 'Embed MCP (Model Context Protocol) server for AI agent control',
+)
+

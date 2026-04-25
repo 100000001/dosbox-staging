@@ -76,6 +76,10 @@
 #include "vga.h"
 #include "video.h"
 
+#if C_MCP
+#include "../mcp/mcp_bridge.h"
+#endif
+
 static void switch_console_to_utf8()
 {
 #if WIN32
@@ -5131,8 +5135,20 @@ int sdl_main(int argc, char* argv[])
 			MAPPER_DisplayUI();
 		}
 
+#if C_MCP
+		// Bring the MCP server up after all modules are registered
+		// and conf is parsed, but before the emulator starts running.
+		// Keep it minimal for v0.1: localhost-only, fixed port. A
+		// proper [mcp] config section will land after smoke tests.
+		(void)MCP_Init("127.0.0.1", 4747);
+#endif
+
 		// Run the machine until shutdown
 		control->StartUp();
+
+#if C_MCP
+		MCP_Shutdown();
+#endif
 
 		// Shutdown and release
 		control.reset();

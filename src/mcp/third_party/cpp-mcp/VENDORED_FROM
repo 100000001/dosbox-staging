@@ -1,0 +1,11 @@
+Vendored from: https://github.com/hkr04/cpp-mcp
+Commit: 9e26ce929fb50e328f09a57b30aa85820f0142ca
+License: MIT (see LICENSE)
+
+Layout matches upstream:
+  include/   public headers
+  src/       library .cpp files
+  common/    bundled third-party (httplib.h, nlohmann json.hpp, base64.hpp)
+
+To upgrade: pull a new tarball/clone from upstream and replace files in
+include/, src/, common/ in place. Update the commit hash above.
