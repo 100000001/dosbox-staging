@@ -238,7 +238,11 @@ bool RENDER_StartUpdate()
 		} else {
 			RENDER_DrawLine = start_line_handler;
 			if (CAPTURE_IsCapturingImage() ||
-			    CAPTURE_IsCapturingVideo()) {
+			    CAPTURE_IsCapturingVideo()
+#if C_MCP
+			    || true
+#endif
+			    ) {
 				render.fullFrame = true;
 			} else {
 				render.fullFrame = false;
@@ -265,7 +269,11 @@ void RENDER_EndUpdate(bool abort)
 
 	RENDER_DrawLine = empty_line_handler;
 
-	if (CAPTURE_IsCapturingImage() || CAPTURE_IsCapturingVideo()) {
+	if (CAPTURE_IsCapturingImage() || CAPTURE_IsCapturingVideo()
+#if C_MCP
+	    || true
+#endif
+	    ) {
 		bool double_width  = false;
 		bool double_height = false;
 		if (render.src.double_width != render.src.double_height) {

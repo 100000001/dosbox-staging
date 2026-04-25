@@ -34,6 +34,7 @@ nlohmann::json tool_mem_write_main_thread(const nlohmann::json& args);
 nlohmann::json tool_memory_search_main_thread(const nlohmann::json& args);
 nlohmann::json tool_send_key_main_thread(const nlohmann::json& args);
 nlohmann::json tool_send_keys_main_thread(const nlohmann::json& args);
+nlohmann::json tool_screenshot_main_thread(const nlohmann::json& args);
 
 namespace {
 
@@ -171,6 +172,18 @@ void register_all_tools(mcp::server& s)
 	                .with_string_param("text", "ASCII text to type", true)
 	                .build(),
 	        make_handler(&tool_send_keys_main_thread));
+
+	s.register_tool(
+	        tool_builder("screenshot")
+	                .with_description(
+	                        "Capture the most recent emulated frame as "
+	                        "a PNG. Returns {width, height, format, "
+	                        "image_b64} where image_b64 is base64-encoded "
+	                        "PNG data. Resolution is the game's native "
+	                        "render resolution (e.g. 320x200 for VGA "
+	                        "mode 13h), pre-scaler.")
+	                .build(),
+	        make_handler(&tool_screenshot_main_thread));
 }
 
 } // namespace

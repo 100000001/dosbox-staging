@@ -1,4 +1,5 @@
 libmcp_sources = files(
+    'mcp_screenshot.cpp',
     'mcp_server.cpp',
     'mcp_tools.cpp',
     'third_party/cpp-mcp/src/mcp_message.cpp',
@@ -28,6 +29,7 @@ libmcp = static_library(
     libmcp_sources,
     include_directories: [incdir, libmcp_incdir],
     cpp_args: libmcp_cpp_args,
+    dependencies: [png_dep],
 )
 
 libmcp_dep = declare_dependency(
