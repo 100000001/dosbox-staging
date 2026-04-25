@@ -31,6 +31,7 @@ nlohmann::json tool_resume_main_thread(const nlohmann::json& args);
 nlohmann::json tool_get_status_main_thread(const nlohmann::json& args);
 nlohmann::json tool_mem_read_main_thread(const nlohmann::json& args);
 nlohmann::json tool_mem_write_main_thread(const nlohmann::json& args);
+nlohmann::json tool_memory_search_main_thread(const nlohmann::json& args);
 nlohmann::json tool_send_key_main_thread(const nlohmann::json& args);
 nlohmann::json tool_send_keys_main_thread(const nlohmann::json& args);
 
@@ -122,6 +123,35 @@ void register_all_tools(mcp::server& s)
 	                                   "Hex-encoded bytes to write", true)
 	                .build(),
 	        make_handler(&tool_mem_write_main_thread));
+
+	s.register_tool(
+	        tool_builder("memory_search")
+	                .with_description(
+	                        "Scan emulated DOS memory for a byte pattern. "
+	                        "Inputs: 'hex' (needle bytes, 1..256 bytes), "
+	                        "optional 'mask_hex' same length (ff=strict, "
+	                        "00=wildcard), optional 'start'/'end' linear "
+	                        "addresses (default: full RAM), optional "
+	                        "'max_results' (default 1024). Returns matching "
+	                        "addresses, sorted ascending; matches may "
+	                        "overlap. Designed for play-and-search "
+	                        "reverse-engineering of game state structs.")
+	                .with_string_param("hex", "Needle bytes, hex-encoded",
+	                                   true)
+	                .with_string_param("mask_hex",
+	                                   "Per-byte mask, hex-encoded "
+	                                   "(same length as 'hex')",
+	                                   false)
+	                .with_number_param("start",
+	                                   "Linear start address (inclusive)",
+	                                   false)
+	                .with_number_param("end",
+	                                   "Linear end address (exclusive)",
+	                                   false)
+	                .with_number_param("max_results",
+	                                   "Cap on returned matches", false)
+	                .build(),
+	        make_handler(&tool_memory_search_main_thread));
 
 	s.register_tool(
 	        tool_builder("send_key")

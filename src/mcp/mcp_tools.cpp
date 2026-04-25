@@ -6,6 +6,7 @@
  *  it may freely touch CPU/memory/keyboard state.
  */
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <cstdint>
@@ -13,6 +14,10 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include "paging.h" // mem_readb<MemOpMode>(addr) template lives here
 
 #include "mcp_third_party.h"
 #include "mcp_queue.h"
@@ -209,6 +214,92 @@ nlohmann::json tool_mem_write_main_thread(const nlohmann::json& args)
 	return {{"ok", true},
 	        {"address", static_cast<uint32_t>(addr)},
 	        {"written", raw.size()}};
+}
+
+nlohmann::json tool_memory_search_main_thread(const nlohmann::json& args)
+{
+	if (!args.contains("hex")) {
+		throw std::invalid_argument("missing 'hex'");
+	}
+	std::string needle;
+	if (!hex_decode(args["hex"].get<std::string>(), needle)) {
+		throw std::invalid_argument("'hex' is not a valid hex string");
+	}
+	if (needle.empty() || needle.size() > 256) {
+		throw std::invalid_argument(
+		        "needle length must be 1..256 bytes");
+	}
+
+	std::string mask(needle.size(), static_cast<char>(0xff));
+	if (args.contains("mask_hex") && !args["mask_hex"].is_null()) {
+		std::string m;
+		if (!hex_decode(args["mask_hex"].get<std::string>(), m)) {
+			throw std::invalid_argument(
+			        "'mask_hex' is not a valid hex string");
+		}
+		if (m.size() != needle.size()) {
+			throw std::invalid_argument(
+			        "'mask_hex' length must match 'hex' length");
+		}
+		mask = std::move(m);
+	}
+
+	// Pre-mask the needle so the inner loop is a single AND+compare per
+	// byte instead of two ANDs.
+	for (size_t i = 0; i < needle.size(); ++i) {
+		needle[i] = static_cast<char>(needle[i] & mask[i]);
+	}
+
+	const uint64_t ram_end = static_cast<uint64_t>(MEM_TotalPages())
+	                         * static_cast<uint64_t>(MemPageSize);
+
+	uint64_t start = args.value("start", uint64_t{0});
+	uint64_t end   = args.value("end", ram_end);
+	if (start > ram_end) start = ram_end;
+	if (end   > ram_end) end   = ram_end;
+	if (end < start)     end   = start;
+
+	const uint32_t max_results = args.value(
+	        "max_results", uint32_t{1024});
+
+	std::vector<uint32_t> hits;
+	hits.reserve(std::min<uint32_t>(max_results, 4096));
+	bool truncated   = false;
+	uint64_t scanned = 0;
+
+	const size_t n = needle.size();
+	if (end >= start + n) {
+		const uint64_t last = end - n;
+		for (uint64_t addr = start; addr <= last; ++addr) {
+			bool match = true;
+			for (size_t i = 0; i < n; ++i) {
+				const uint8_t b = mem_readb<MemOpMode::SkipBreakpoints>(
+				        static_cast<PhysPt>(addr + i));
+				if ((b & static_cast<uint8_t>(mask[i]))
+				    != static_cast<uint8_t>(needle[i])) {
+					match = false;
+					break;
+				}
+			}
+			if (match) {
+				hits.push_back(static_cast<uint32_t>(addr));
+				if (hits.size() >= max_results) {
+					truncated = true;
+					scanned   = (addr + 1) - start;
+					break;
+				}
+			}
+		}
+		if (!truncated) {
+			scanned = (last + 1) - start;
+		}
+	}
+
+	return {{"ok", true},
+	        {"count", hits.size()},
+	        {"addresses", hits},
+	        {"truncated", truncated},
+	        {"scanned", scanned}};
 }
 
 nlohmann::json tool_send_key_main_thread(const nlohmann::json& args)
