@@ -24,8 +24,10 @@
 #include "mcp_queue.h"
 
 #include "bios.h"
+#include "../ints/int10.h"
 #include "keyboard.h"
 #include "mem.h"
+#include "render.h"
 
 namespace mcp_bridge {
 std::atomic<bool>& paused_flag();
@@ -245,10 +247,22 @@ nlohmann::json tool_resume_main_thread(const nlohmann::json& /*args*/)
 
 nlohmann::json tool_get_status_main_thread(const nlohmann::json& /*args*/)
 {
-	return {{"ok", true},
-	        {"paused", mcp_bridge::paused_flag().load()},
-	        {"server", "dosbox-mcp"},
-	        {"version", "0.1.0"}};
+	nlohmann::json out = {{"ok", true},
+	                      {"paused", mcp_bridge::paused_flag().load()},
+	                      {"server", "dosbox-mcp"},
+	                      {"version", "0.1.0"},
+	                      {"fps", render.fps}};
+
+	// CurMode is set by INT 10h; on a freshly booted machine it points
+	// at a valid VGA mode entry. Report the BIOS mode number plus the
+	// pixel dimensions so callers can sanity-check resolution before
+	// asking for a screenshot.
+	if (CurMode != ModeList_VGA.end()) {
+		out["video_mode"]    = CurMode->mode;
+		out["screen_width"]  = CurMode->swidth;
+		out["screen_height"] = CurMode->sheight;
+	}
+	return out;
 }
 
 nlohmann::json tool_mem_read_main_thread(const nlohmann::json& args)
