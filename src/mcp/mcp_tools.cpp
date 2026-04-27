@@ -24,6 +24,7 @@
 #include "mcp_queue.h"
 
 #include "bios.h"
+#include "cpu.h"
 #include "../ints/int10.h"
 #include "keyboard.h"
 #include "mem.h"
@@ -429,6 +430,42 @@ nlohmann::json tool_send_key_main_thread(const nlohmann::json& args)
 	bool ok       = BIOS_AddKeyToBuffer(code);
 	return {{"ok", ok}, {"code", static_cast<uint32_t>(code)},
 	        {"via", "bios"}};
+}
+
+nlohmann::json tool_set_speed_main_thread(const nlohmann::json& args)
+{
+	if (!args.contains("multiplier")) {
+		throw std::invalid_argument("missing 'multiplier'");
+	}
+	const double mult = args["multiplier"].get<double>();
+	if (!(mult >= 0.1 && mult <= 100.0)) {
+		throw std::invalid_argument("'multiplier' must be in [0.1, 100]");
+	}
+
+	// Captured lazily on the first call so the baseline reflects whatever
+	// the user (or auto-adjust) settled on by the time the agent first
+	// touches speed. After that, multiplier=1.0 always restores that
+	// reference rate. Lives on the main thread, so no synchronisation.
+	static int baseline_cycles = 0;
+	if (baseline_cycles == 0) {
+		baseline_cycles = CPU_CycleMax > 0 ? CPU_CycleMax : 3000;
+	}
+
+	const int prev_cycles  = CPU_CycleMax;
+	const bool prev_auto   = CPU_CycleAutoAdjust;
+	const long requested   = std::lround(
+	        static_cast<double>(baseline_cycles) * mult);
+	const int new_cycles = static_cast<int>(std::max<long>(1, requested));
+
+	CPU_CycleAutoAdjust = false;
+	CPU_CycleMax        = new_cycles;
+
+	return {{"ok", true},
+	        {"multiplier", mult},
+	        {"baseline_cycles", baseline_cycles},
+	        {"prev_cycles", prev_cycles},
+	        {"current_cycles", new_cycles},
+	        {"prev_auto_adjust", prev_auto}};
 }
 
 nlohmann::json tool_send_keys_main_thread(const nlohmann::json& args)

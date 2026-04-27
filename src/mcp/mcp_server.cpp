@@ -37,6 +37,7 @@ nlohmann::json tool_mem_write_main_thread(const nlohmann::json& args);
 nlohmann::json tool_memory_search_main_thread(const nlohmann::json& args);
 nlohmann::json tool_send_key_main_thread(const nlohmann::json& args);
 nlohmann::json tool_send_keys_main_thread(const nlohmann::json& args);
+nlohmann::json tool_set_speed_main_thread(const nlohmann::json& args);
 nlohmann::json tool_screenshot_main_thread(const nlohmann::json& args);
 
 namespace {
@@ -175,6 +176,18 @@ void register_all_tools(mcp::server& s)
 	                .with_string_param("text", "ASCII text to type", true)
 	                .build(),
 	        make_handler(&tool_send_keys_main_thread));
+
+	s.register_tool(
+	        tool_builder("set_speed")
+	                .with_description(
+	                        "Scale the emulated CPU rate. 'multiplier' is "
+	                        "in [0.1, 100]; 1.0 == the rate the agent first "
+	                        "saw (captured lazily). Disables auto-adjust.")
+	                .with_number_param("multiplier",
+	                                   "Speed multiplier (1.0=baseline)",
+	                                   true)
+	                .build(),
+	        make_handler(&tool_set_speed_main_thread));
 
 	s.register_tool(
 	        tool_builder("screenshot")
