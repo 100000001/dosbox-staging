@@ -16,4 +16,8 @@
 // cached frame with a deep copy of `image`.
 void MCP_CaptureLatestFrame(const RenderedImage& image);
 
+// Called from MCP_Shutdown so the cached frame is released alongside
+// the rest of the server.
+void MCP_ReleaseLatestFrame(void);
+
 #endif // DOSBOX_MCP_SCREENSHOT_H

@@ -18,6 +18,7 @@
 
 #include "mcp_third_party.h"
 #include "mcp_queue.h"
+#include "mcp_screenshot.h"
 
 #include "third_party/cpp-mcp/include/mcp_server.h"
 #include "third_party/cpp-mcp/include/mcp_tool.h"
@@ -295,6 +296,7 @@ extern "C" void MCP_Shutdown(void)
 	} catch (...) {
 	}
 	g_server.reset();
+	MCP_ReleaseLatestFrame();
 }
 
 extern "C" void MCP_PumpQueue(void)

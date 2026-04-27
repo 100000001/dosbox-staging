@@ -204,6 +204,11 @@ void MCP_CaptureLatestFrame(const RenderedImage& image)
 	g_has_frame = true;
 }
 
+void MCP_ReleaseLatestFrame(void)
+{
+	clear_latest();
+}
+
 nlohmann::json tool_screenshot_main_thread(const nlohmann::json& /*args*/)
 {
 	if (!g_has_frame) {
