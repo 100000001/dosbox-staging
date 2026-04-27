@@ -119,6 +119,14 @@ if have_tool run_command; then
   call run_command  '{"command":"VER"}'         'DOSBox'
   call run_command  '{"command":"ECHO hello"}'  'hello'
   call run_command  '{"command":"DIR"}'         'Volume'
+  # Opt-in: requires a writable current drive (default Z: is
+  # read-only). Set MCP_SMOKE_BAT=1 with C: or similar mounted to
+  # exercise the RunBatchFile() drain after ParseLine.
+  if [ "${MCP_SMOKE_BAT:-0}" = "1" ]; then
+    call run_command '{"command":"ECHO ECHO bat-ok > T.BAT"}'
+    call run_command '{"command":"T.BAT"}'      'bat-ok'
+    call run_command '{"command":"DEL T.BAT"}'
+  fi
 else
   echo "run_command    skipped (server build predates the tool)"
 fi

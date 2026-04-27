@@ -523,7 +523,9 @@ nlohmann::json tool_run_command_main_thread(const nlohmann::json& args)
 	auto output = MCP_ConsoleTap_ReadSince(mark, truncated);
 	return {{"ok", true},
 	        {"output", output},
-	        {"length", output.size()},
+	        // UTF-8 byte count of `output`, not visible chars: a
+	        // CP437 byte > 0x7F encodes as 2-3 UTF-8 bytes here.
+	        {"output_bytes", output.size()},
 	        {"truncated", truncated},
 	        {"exit_code", static_cast<unsigned>(dos.return_code)}};
 }

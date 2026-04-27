@@ -57,8 +57,14 @@ std::string MCP_ConsoleTap_ReadSince(uint64_t cursor, bool& truncated)
 	std::string raw;
 	{
 		std::lock_guard<std::mutex> lock(g_mu);
-		const size_t   capacity = g_buf.size();
-		const uint64_t total    = g_total_written;
+		const size_t capacity = g_buf.size();
+		// Pre-init or post-Disable: nothing buffered, no slice math
+		// (the modulo by capacity below would also be UB).
+		if (capacity == 0) {
+			truncated = false;
+			return {};
+		}
+		const uint64_t total = g_total_written;
 		// Saturating subtraction so we never underflow the unsigned
 		// counter when total < capacity (i.e. just after init or
 		// SetCapacity).

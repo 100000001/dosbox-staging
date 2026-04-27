@@ -77,6 +77,20 @@ test(
     is_parallel: false,
 )
 
+# mcp_console: tests the teletype-tap ring buffer in isolation.
+# Stubs dos_to_utf8 so we don't pull in the full unicode subsystem.
+mcp_console = executable(
+    'mcp_console',
+    [
+        'mcp_console_tests.cpp',
+        '../src/mcp/mcp_console.cpp',
+    ],
+    dependencies: [gmock_dep, libloguru_dep],
+    include_directories: [incdir, include_directories('../src/mcp')],
+    cpp_args: cpp_args,
+)
+test('gtest mcp_console', mcp_console)
+
 # other unit tests
 
 unit_tests = [

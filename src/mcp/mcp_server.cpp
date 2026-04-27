@@ -183,13 +183,16 @@ void register_all_tools(mcp::server& s)
 	                        "shell prompt and return its visible "
 	                        "teletype output. Synchronous: blocks until "
 	                        "the command (.bat included) returns. "
-	                        "Captures output via INT 21h stdout / INT "
-	                        "29h / BIOS teletype; ANSI escapes "
-	                        "(consumed by CON before teletype), BIOS "
-	                        "scroll/cursor (CLS), and direct VRAM "
-	                        "writers (TUI apps, games) do NOT show — "
-	                        "pair with screenshot for those. Refused "
-	                        "if paused or while a program is active.")
+	                        "The command line itself is NOT echoed in "
+	                        "`output` — only what the command produces. "
+	                        "Captures via INT 21h stdout / INT 29h / "
+	                        "BIOS teletype; ANSI escapes (consumed by "
+	                        "CON before teletype), BIOS scroll/cursor "
+	                        "(CLS), and direct VRAM writers (TUI apps, "
+	                        "games) do NOT show — pair with screenshot "
+	                        "for those. Refused if paused, if a program "
+	                        "is active, or if the prompt has half-typed "
+	                        "input pending.")
 	                .with_string_param("command",
 	                                   "DOS command line (printable "
 	                                   "ASCII, ≤4095 chars, no NUL/CR/LF)",
