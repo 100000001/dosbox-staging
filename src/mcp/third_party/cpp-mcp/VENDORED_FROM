@@ -8,4 +8,11 @@ Layout matches upstream:
   common/    bundled third-party (httplib.h, nlohmann json.hpp, base64.hpp)
 
 To upgrade: pull a new tarball/clone from upstream and replace files in
-include/, src/, common/ in place. Update the commit hash above.
+include/, src/, common/ in place. Update the commit hash above. Re-apply
+the local patches below.
+
+Local patches:
+  - src/mcp_server.cpp close_session: replaced unique_ptr::release() on
+    the SSE worker thread with detach(). Upstream leaks the std::thread
+    heap object and the underlying pthread (~512 KB stack on macOS)
+    every time a /sse session closes.

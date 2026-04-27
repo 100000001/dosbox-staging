@@ -1432,9 +1432,15 @@ void server::close_session(const std::string& session_id) {
             dispatcher_to_close->close();
         }
         
-        // Release thread resources
-        if (thread_to_release) {
-            thread_to_release.release();
+        // Detach the SSE worker before unique_ptr destruction. The
+        // thread is still running (it will exit once it observes
+        // is_closed/!running_), so calling the std::thread destructor
+        // while joinable would std::terminate. The previous code used
+        // release(), which leaked both the std::thread heap object and
+        // the underlying pthread resources (~512 KB stack each on
+        // macOS) — every closed SSE session left a zombie.
+        if (thread_to_release && thread_to_release->joinable()) {
+            thread_to_release->detach();
         }
     } catch (const std::exception& e) {
         LOG_WARNING("Exception while cleaning up session resources: ", session_id, ", ", e.what());
