@@ -120,6 +120,7 @@ private:
 	bool call                              = false;
 	bool exit_cmd_called                   = false;
 	bool at_prompt_                        = false;
+	mutable size_t prompt_input_size_      = 0;
 	static inline bool help_list_populated = false;
 
 public:
@@ -130,12 +131,18 @@ public:
 	void Run() override;
 	void RunBatchFile();
 
-	// True only while Run() is parked inside InputCommand and no
-	// batch is queued — i.e. the shell is actively reading the next
-	// command from the user. External callers (the MCP run_command
-	// tool) check this before injecting their own ParseLine to avoid
-	// re-entering the shell mid-batch / mid-command.
-	bool IsAtPrompt() const { return at_prompt_ && batchfiles.empty(); }
+	// True only while Run() is parked inside InputCommand reading a
+	// fresh, empty prompt: no batch queued, no half-typed command in
+	// the read buffer (e.g. user has pressed Up arrow but not Enter,
+	// or partially typed a line). External callers (the MCP
+	// run_command tool) check this before injecting their own
+	// ParseLine to avoid re-entering the shell mid-batch / mid-command
+	// or stomping on user input that would otherwise execute on Enter.
+	bool IsAtPrompt() const
+	{
+		return at_prompt_ && batchfiles.empty() &&
+		       prompt_input_size_ == 0;
+	}
 
 	/* A load of subfunctions */
 	void ParseLine(char* line);

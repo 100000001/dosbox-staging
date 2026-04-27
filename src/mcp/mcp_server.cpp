@@ -318,6 +318,7 @@ extern "C" bool MCP_Init(void)
 			LOG_WARNING("MCP: server failed to start on %s:%d",
 			            conf.host.c_str(), conf.port);
 			g_server.reset();
+			MCP_ConsoleTap_Disable();
 			return false;
 		}
 		LOG_MSG("MCP: listening on %s:%d (sse=/sse, mcp=/mcp)",
@@ -326,6 +327,7 @@ extern "C" bool MCP_Init(void)
 	} catch (const std::exception& e) {
 		LOG_WARNING("MCP: init failed: %s", e.what());
 		g_server.reset();
+		MCP_ConsoleTap_Disable();
 		return false;
 	}
 }

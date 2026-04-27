@@ -144,6 +144,14 @@ std::string DOS_Shell::ReadCommand()
 		assert(command.empty() || cursor_position <= command.size());
 		assert(completion.empty() || completion_start <= command.size());
 
+		// Mirror the read-buffer's size into the shell so external
+		// observers (MCP run_command's IsAtPrompt) can refuse to
+		// inject when the user has typed something that hasn't been
+		// committed with Enter. Updated at the top of each loop
+		// iteration: the CPU then blocks inside DOS_ReadFile, so
+		// this value is accurate for the entire wait window.
+		prompt_input_size_ = command.size();
+
 		bool viewing_tab_completions = false;
 
 		while (!DOS_ReadFile(input_handle, &data, &byte_count)) {
@@ -270,7 +278,7 @@ std::string DOS_Shell::ReadCommand()
 			break;
 
 		case '\n': break;
-		case '\r': prompt.Newline(); return command;
+		case '\r': prompt.Newline(); prompt_input_size_ = 0; return command;
 
 		case Escape:
 			command += "\\";
@@ -296,6 +304,7 @@ std::string DOS_Shell::ReadCommand()
 		}
 	}
 
+	prompt_input_size_ = 0;
 	return "";
 }
 
