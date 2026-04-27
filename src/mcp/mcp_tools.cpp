@@ -469,9 +469,15 @@ nlohmann::json tool_run_command_main_thread(const nlohmann::json& args)
 	if (first_shell == nullptr) {
 		throw std::runtime_error("shell not ready");
 	}
-	if (dos.psp() != DOS_FIRST_SHELL) {
+	// IsAtPrompt is true only while the shell's Run loop is parked
+	// inside InputCommand and no batch is queued. dos.psp() ==
+	// DOS_FIRST_SHELL would also be true mid-batch, mid-internal-
+	// command, or while a previous ParseLine is on the stack — none
+	// of which are safe injection points.
+	if (!first_shell->IsAtPrompt()) {
 		throw std::runtime_error(
-		        "a program is currently active — return to the DOS prompt first");
+		        "shell is busy (program, batch, or in-progress command) "
+		        "— wait for the prompt");
 	}
 
 	InFlightGuard guard;

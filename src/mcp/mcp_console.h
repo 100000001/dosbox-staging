@@ -38,9 +38,13 @@ uint64_t MCP_ConsoleTap_Mark(void);
 // the start.
 std::string MCP_ConsoleTap_ReadSince(uint64_t cursor, bool& truncated);
 
-// Reallocates the ring buffer and resets the write counter. Intended
-// to be called once during MCP_Init from the [mcp] config. Capacity is
-// clamped to [16 KB, 4 MB].
+// Reallocates the ring buffer, resets the write counter, and enables
+// the tap. Called once during MCP_Init from the [mcp] config. Capacity
+// is clamped to [16 KB, 4 MB].
 void MCP_ConsoleTap_SetCapacity(size_t bytes);
+
+// Disables the tap and frees its buffer. After this Notify is a quick
+// atomic check that returns immediately. Called from MCP_Shutdown.
+void MCP_ConsoleTap_Disable(void);
 
 #endif // DOSBOX_MCP_CONSOLE_H

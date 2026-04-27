@@ -76,6 +76,15 @@ void DOS_Shell::ShowPrompt()
 
 void DOS_Shell::InputCommand(char* line)
 {
+	// RAII guard so IsAtPrompt() returns true for the duration of the
+	// blocking read (and only for that duration — not while a batch
+	// is running, not while ParseLine is on the stack).
+	struct PromptGuard {
+		bool& flag;
+		PromptGuard(bool& f) : flag(f) { flag = true; }
+		~PromptGuard()                  { flag = false; }
+	} prompt_guard(at_prompt_);
+
 	std::string command = ReadCommand();
 
 	history->Append(command, get_utf8_code_page());

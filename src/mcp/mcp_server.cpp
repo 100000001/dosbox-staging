@@ -344,6 +344,7 @@ extern "C" void MCP_Shutdown(void)
 	}
 	g_server.reset();
 	MCP_ReleaseLatestFrame();
+	MCP_ConsoleTap_Disable();
 }
 
 extern "C" void MCP_PumpQueue(void)

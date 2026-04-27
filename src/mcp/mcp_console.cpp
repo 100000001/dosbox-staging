@@ -10,6 +10,7 @@
 #include "mcp_console.h"
 
 #include <algorithm>
+#include <atomic>
 #include <mutex>
 #include <vector>
 
@@ -17,14 +18,15 @@
 
 namespace {
 
-// Default chosen so a typical DIR / MEM /D / TYPE of a small file fits
-// without rolling over. Configurable via [mcp] mcp_console_buffer_kb.
-constexpr size_t DefaultCapacity = 256 * 1024;
 constexpr size_t MinCapacity     = 16 * 1024;
 constexpr size_t MaxCapacity     = 4 * 1024 * 1024;
 
+// Off until SetCapacity is called from MCP_Init. The atomic lets us
+// short-circuit Notify on the hot path (every emulated teletype byte)
+// without touching the mutex when MCP is config-disabled or shut down.
+std::atomic<bool>     g_enabled{false};
 std::mutex            g_mu;
-std::vector<uint8_t>  g_buf(DefaultCapacity);
+std::vector<uint8_t>  g_buf;
 uint64_t              g_total_written = 0;
 size_t                g_head          = 0;
 
@@ -32,6 +34,9 @@ size_t                g_head          = 0;
 
 void MCP_ConsoleTap_Notify(uint8_t byte)
 {
+	if (!g_enabled.load(std::memory_order_relaxed)) {
+		return;
+	}
 	std::lock_guard<std::mutex> lock(g_mu);
 	if (g_buf.empty()) {
 		return;
@@ -95,8 +100,20 @@ std::string MCP_ConsoleTap_ReadSince(uint64_t cursor, bool& truncated)
 void MCP_ConsoleTap_SetCapacity(size_t bytes)
 {
 	const size_t clamped = std::clamp(bytes, MinCapacity, MaxCapacity);
+	{
+		std::lock_guard<std::mutex> lock(g_mu);
+		g_buf.assign(clamped, 0);
+		g_head          = 0;
+		g_total_written = 0;
+	}
+	g_enabled.store(true, std::memory_order_relaxed);
+}
+
+void MCP_ConsoleTap_Disable(void)
+{
+	g_enabled.store(false, std::memory_order_relaxed);
 	std::lock_guard<std::mutex> lock(g_mu);
-	g_buf.assign(clamped, 0);
+	std::vector<uint8_t>().swap(g_buf);
 	g_head          = 0;
 	g_total_written = 0;
 }

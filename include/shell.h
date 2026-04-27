@@ -119,6 +119,7 @@ private:
 	uint16_t input_handle                  = STDIN;
 	bool call                              = false;
 	bool exit_cmd_called                   = false;
+	bool at_prompt_                        = false;
 	static inline bool help_list_populated = false;
 
 public:
@@ -128,6 +129,13 @@ public:
 	DOS_Shell& operator=(const DOS_Shell&) = delete; // prevent assignment
 	void Run() override;
 	void RunBatchFile();
+
+	// True only while Run() is parked inside InputCommand and no
+	// batch is queued — i.e. the shell is actively reading the next
+	// command from the user. External callers (the MCP run_command
+	// tool) check this before injecting their own ParseLine to avoid
+	// re-entering the shell mid-batch / mid-command.
+	bool IsAtPrompt() const { return at_prompt_ && batchfiles.empty(); }
 
 	/* A load of subfunctions */
 	void ParseLine(char* line);

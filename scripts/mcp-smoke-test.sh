@@ -57,7 +57,7 @@ sys.exit(0 if '$1' in names else 1)
 
 failures=0
 call() {
-  local name="$1" args="$2"
+  local name="$1" args="$2" expect="${3:-}"
   local body
   body=$(curl -sS --max-time 10 -X POST "$URL" \
     -H "Content-Type: application/json" \
@@ -65,9 +65,10 @@ call() {
     -H "Mcp-Session-Id: $SID" \
     -d "{\"jsonrpc\":\"2.0\",\"id\":42,\"method\":\"tools/call\",\"params\":{\"name\":\"$name\",\"arguments\":$args}}")
   local verdict
-  if verdict=$(printf '%s' "$body" | python3 -c '
-import json, sys
+  if verdict=$(printf '%s' "$body" | EXPECT="$expect" python3 -c '
+import json, os, sys
 body = sys.stdin.read()
+expect = os.environ.get("EXPECT", "")
 try:
     r = json.loads(body)
     if "error" in r:
@@ -79,8 +80,17 @@ try:
         sys.exit(1)
     text = res.get("content", [{}])[0].get("text", "")
     summary = json.loads(text) if text else res
+    if expect:
+        # Search every string field; mostly we care about "output"
+        # but a future tool might surface assertable text elsewhere.
+        haystack = json.dumps(summary)
+        if expect not in haystack:
+            print("FAIL assert: expected " + repr(expect) +
+                  " missing from response (got " + haystack[:160] + ")")
+            sys.exit(1)
     if isinstance(summary, dict):
-        keys = [k for k in sorted(summary.keys()) if k != "image_b64"][:6]
+        keys = [k for k in sorted(summary.keys())
+                if k not in ("image_b64", "output")][:6]
         print("ok " + " ".join(keys))
     else:
         print("ok")
@@ -106,9 +116,9 @@ call screenshot     '{}'
 # run_command must come before send_keys: send_keys leaves text at the
 # DOS prompt that the next ParseLine would prefix to its own command.
 if have_tool run_command; then
-  call run_command  '{"command":"VER"}'
-  call run_command  '{"command":"ECHO hello"}'
-  call run_command  '{"command":"DIR"}'
+  call run_command  '{"command":"VER"}'         'DOSBox'
+  call run_command  '{"command":"ECHO hello"}'  'hello'
+  call run_command  '{"command":"DIR"}'         'Volume'
 else
   echo "run_command    skipped (server build predates the tool)"
 fi
