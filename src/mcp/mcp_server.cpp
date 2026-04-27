@@ -22,7 +22,9 @@
 #include "third_party/cpp-mcp/include/mcp_server.h"
 #include "third_party/cpp-mcp/include/mcp_tool.h"
 
+#include "control.h"
 #include "logging.h"
+#include "setup.h"
 
 // Forward declarations of tool implementations defined in mcp_tools.cpp.
 // External linkage so the link-time symbols match.
@@ -202,16 +204,61 @@ RequestQueue& queue()
 
 } // namespace mcp_bridge
 
-extern "C" bool MCP_Init(const char* host, int port)
+extern "C" void MCP_AddConfigSection(void)
+{
+	constexpr auto only_at_start = Property::Changeable::OnlyAtStart;
+
+	Section_prop* sec = control->AddSection_prop("mcp", nullptr,
+	                                             /*changeable_at_runtime=*/false);
+
+	auto pbool = sec->Add_bool("mcp_enabled", only_at_start, true);
+	pbool->Set_help(
+	        "Enable the embedded Model Context Protocol server, which lets an external\n"
+	        "AI agent drive the emulator (pause, peek memory, push keystrokes, take\n"
+	        "screenshots) over HTTP (enabled by default).");
+
+	auto pstring = sec->Add_string("mcp_host", only_at_start, "127.0.0.1");
+	pstring->Set_help(
+	        "Address to bind the MCP server to ('127.0.0.1' by default).\n"
+	        "Use '0.0.0.0' to accept connections from other machines on the network.\n"
+	        "Note: the server has no authentication; only bind to non-loopback\n"
+	        "addresses on trusted networks.");
+
+	auto pint = sec->Add_int("mcp_port", only_at_start, 4747);
+	pint->SetMinMax(1, 65535);
+	pint->Set_help("TCP port to listen on (4747 by default).");
+
+	pint = sec->Add_int("mcp_session_timeout", only_at_start, 600);
+	pint->SetMinMax(0, 86400);
+	pint->Set_help(
+	        "Idle session timeout in seconds (600 by default; 0 disables the timeout).\n"
+	        "Long-running agent sessions may need a higher value to avoid having to\n"
+	        "re-issue the 'initialize' handshake.");
+}
+
+extern "C" bool MCP_Init(void)
 {
 	if (g_server) {
 		LOG_WARNING("MCP: already initialized");
 		return true;
 	}
 
+	auto* sec = static_cast<Section_prop*>(control->GetSection("mcp"));
+	if (!sec) {
+		LOG_WARNING("MCP: [mcp] config section not registered");
+		return false;
+	}
+
+	if (!sec->Get_bool("mcp_enabled")) {
+		LOG_MSG("MCP: disabled via [mcp] mcp_enabled=false");
+		return false;
+	}
+
 	mcp::server::configuration conf;
-	conf.host    = host ? host : "127.0.0.1";
-	conf.port    = port;
+	conf.host            = sec->Get_string("mcp_host");
+	conf.port            = sec->Get_int("mcp_port");
+	conf.session_timeout = static_cast<unsigned int>(
+	        sec->Get_int("mcp_session_timeout"));
 	conf.name    = "dosbox-mcp";
 	conf.version = "0.1.0";
 

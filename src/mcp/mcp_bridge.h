@@ -13,9 +13,16 @@
 extern "C" {
 #endif
 
-// Lifecycle. Return false on failure (e.g. port already in use). After a
-// failed Init, Shutdown is still safe to call.
-bool MCP_Init(const char* host, int port);
+// Register the [mcp] config section. Must be called once during config
+// setup (before ParseConfigFiles), alongside config_add_sdl() and
+// DOSBOX_Init().
+void MCP_AddConfigSection(void);
+
+// Lifecycle. Reads the [mcp] section registered by MCP_AddConfigSection
+// and starts the server if enabled=true. Returns false on failure (e.g.
+// port already in use) or if disabled (caller doesn't need to
+// distinguish — MCP_Shutdown is safe in either case).
+bool MCP_Init(void);
 void MCP_Shutdown(void);
 
 // Drain any pending tool requests posted by cpp-mcp worker threads onto

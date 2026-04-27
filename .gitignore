@@ -85,3 +85,4 @@ tools/unlock_the_magic_mpeg_ps.exe
 obj-*.-linux-gnu
 debian
 
+settings.local.json

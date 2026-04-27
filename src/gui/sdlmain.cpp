@@ -4905,6 +4905,9 @@ int sdl_main(int argc, char* argv[])
 		RENDER_AddMessages();
 		messages_add_sdl();
 		config_add_sdl();
+#if C_MCP
+		MCP_AddConfigSection();
+#endif
 
 		// Register DOSBox's (and all modules) messages and conf sections
 		DOSBOX_Init();
@@ -5148,9 +5151,8 @@ int sdl_main(int argc, char* argv[])
 #if C_MCP
 		// Bring the MCP server up after all modules are registered
 		// and conf is parsed, but before the emulator starts running.
-		// Keep it minimal for v0.1: localhost-only, fixed port. A
-		// proper [mcp] config section will land after smoke tests.
-		(void)MCP_Init("127.0.0.1", 4747);
+		// Reads its own [mcp] config section.
+		(void)MCP_Init();
 #endif
 
 		// Run the machine until shutdown
