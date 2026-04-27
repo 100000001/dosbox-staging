@@ -102,9 +102,18 @@ call mem_write      '{"address":1280,"hex":"deadbeef"}'
 call mem_read       '{"address":1280,"length":4}'
 call memory_search  '{"hex":"deadbeef","start":1024,"end":1536,"max_results":4}'
 call resume         '{}'
+call screenshot     '{}'
+# run_command must come before send_keys: send_keys leaves text at the
+# DOS prompt that the next ParseLine would prefix to its own command.
+if have_tool run_command; then
+  call run_command  '{"command":"VER"}'
+  call run_command  '{"command":"ECHO hello"}'
+  call run_command  '{"command":"DIR"}'
+else
+  echo "run_command    skipped (server build predates the tool)"
+fi
 call send_key       '{"key":"esc"}'
 call send_keys      '{"text":"hi"}'
-call screenshot     '{}'
 if have_tool set_speed; then
   call set_speed    '{"multiplier":1.5}'
   call set_speed    '{"multiplier":1.0}'

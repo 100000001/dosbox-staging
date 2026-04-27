@@ -18,6 +18,7 @@
 
 #include "mcp_third_party.h"
 #include "mcp_queue.h"
+#include "mcp_console.h"
 #include "mcp_screenshot.h"
 
 #include "third_party/cpp-mcp/include/mcp_server.h"
@@ -35,6 +36,7 @@ nlohmann::json tool_get_status_main_thread(const nlohmann::json& args);
 nlohmann::json tool_mem_read_main_thread(const nlohmann::json& args);
 nlohmann::json tool_mem_write_main_thread(const nlohmann::json& args);
 nlohmann::json tool_memory_search_main_thread(const nlohmann::json& args);
+nlohmann::json tool_run_command_main_thread(const nlohmann::json& args);
 nlohmann::json tool_send_key_main_thread(const nlohmann::json& args);
 nlohmann::json tool_send_keys_main_thread(const nlohmann::json& args);
 nlohmann::json tool_set_speed_main_thread(const nlohmann::json& args);
@@ -178,6 +180,27 @@ void register_all_tools(mcp::server& s)
 	        make_handler(&tool_send_keys_main_thread));
 
 	s.register_tool(
+	        tool_builder("run_command")
+	                .with_description(
+	                        "Execute a DOS command line at the user's "
+	                        "shell prompt and return its visible "
+	                        "teletype output. Synchronous: blocks until "
+	                        "the command (.bat included) returns. "
+	                        "Captures output via INT 21h stdout / INT "
+	                        "29h / BIOS teletype; ANSI escapes "
+	                        "(consumed by CON before teletype), BIOS "
+	                        "scroll/cursor (CLS), and direct VRAM "
+	                        "writers (TUI apps, games) do NOT show — "
+	                        "pair with screenshot for those. Refused "
+	                        "if paused or while a program is active.")
+	                .with_string_param("command",
+	                                   "DOS command line (printable "
+	                                   "ASCII, ≤4095 chars, no NUL/CR/LF)",
+	                                   true)
+	                .build(),
+	        make_handler(&tool_run_command_main_thread));
+
+	s.register_tool(
 	        tool_builder("set_speed")
 	                .with_description(
 	                        "Scale the emulated CPU rate. 'multiplier' is "
@@ -248,6 +271,14 @@ extern "C" void MCP_AddConfigSection(void)
 	        "Idle session timeout in seconds (600 by default; 0 disables the timeout).\n"
 	        "Long-running agent sessions may need a higher value to avoid having to\n"
 	        "re-issue the 'initialize' handshake.");
+
+	pint = sec->Add_int("mcp_console_buffer_kb", only_at_start, 256);
+	pint->SetMinMax(16, 4096);
+	pint->Set_help(
+	        "Size in KB of the rolling teletype buffer the MCP server retains for\n"
+	        "'run_command' (and any future console-reading tools). Larger values let\n"
+	        "long DIR/MEM/TYPE listings come back without truncation; smaller values\n"
+	        "save memory.");
 }
 
 extern "C" bool MCP_Init(void)
@@ -267,6 +298,9 @@ extern "C" bool MCP_Init(void)
 		LOG_MSG("MCP: disabled via [mcp] mcp_enabled=false");
 		return false;
 	}
+
+	const auto buffer_kb = sec->Get_int("mcp_console_buffer_kb");
+	MCP_ConsoleTap_SetCapacity(static_cast<size_t>(buffer_kb) * 1024);
 
 	mcp::server::configuration conf;
 	conf.host            = sec->Get_string("mcp_host");

@@ -22,13 +22,16 @@
 
 #include "mcp_third_party.h"
 #include "mcp_queue.h"
+#include "mcp_console.h"
 
 #include "bios.h"
 #include "cpu.h"
+#include "dos_inc.h"
 #include "../ints/int10.h"
 #include "keyboard.h"
 #include "mem.h"
 #include "render.h"
+#include "shell.h"
 
 namespace mcp_bridge {
 std::atomic<bool>& paused_flag();
@@ -430,6 +433,93 @@ nlohmann::json tool_send_key_main_thread(const nlohmann::json& args)
 	bool ok       = BIOS_AddKeyToBuffer(code);
 	return {{"ok", ok}, {"code", static_cast<uint32_t>(code)},
 	        {"via", "bios"}};
+}
+
+// RAII guard for tool_run_command_main_thread. The MCP queue pump runs
+// inside the nested DOSBOX_RunMachine that ParseLine spins up for
+// external programs, so the same handler can re-enter while a previous
+// invocation is still on the stack. That would clobber shell state, so
+// we refuse explicitly.
+namespace {
+std::atomic<bool> g_run_command_in_flight{false};
+
+struct InFlightGuard {
+	bool engaged;
+	InFlightGuard()
+	{
+		bool expected = false;
+		engaged       = g_run_command_in_flight.compare_exchange_strong(
+                        expected, true);
+	}
+	~InFlightGuard()
+	{
+		if (engaged) {
+			g_run_command_in_flight.store(false);
+		}
+	}
+};
+} // namespace
+
+nlohmann::json tool_run_command_main_thread(const nlohmann::json& args)
+{
+	if (mcp_bridge::paused_flag().load()) {
+		throw std::runtime_error(
+		        "emulator is paused — call resume first");
+	}
+	if (first_shell == nullptr) {
+		throw std::runtime_error("shell not ready");
+	}
+	if (dos.psp() != DOS_FIRST_SHELL) {
+		throw std::runtime_error(
+		        "a program is currently active — return to the DOS prompt first");
+	}
+
+	InFlightGuard guard;
+	if (!guard.engaged) {
+		throw std::runtime_error("run_command already in flight");
+	}
+
+	if (!args.contains("command")) {
+		throw std::invalid_argument("missing 'command'");
+	}
+	const auto command = args["command"].get<std::string>();
+	if (command.empty()) {
+		throw std::invalid_argument("'command' must not be empty");
+	}
+	if (command.size() >= CMD_MAXLINE) {
+		throw std::invalid_argument(
+		        "'command' exceeds CMD_MAXLINE-1 (4095) bytes");
+	}
+	for (unsigned char c : command) {
+		if (c == 0 || c == '\r' || c == '\n') {
+			throw std::invalid_argument(
+			        "'command' may not contain NUL/CR/LF");
+		}
+		if (c < 0x20 || c > 0x7E) {
+			throw std::invalid_argument(
+			        "'command' must be printable 7-bit ASCII for v1");
+		}
+	}
+
+	char buf[CMD_MAXLINE];
+	std::strncpy(buf, command.c_str(), CMD_MAXLINE - 1);
+	buf[CMD_MAXLINE - 1] = '\0';
+
+	const uint64_t mark = MCP_ConsoleTap_Mark();
+	first_shell->ParseLine(buf);
+	// ParseLine of a .bat queues the file rather than running it; the
+	// outer shell loop normally drains it via RunBatchFile, but we're
+	// outside that loop, so we drain it ourselves to keep the call
+	// synchronous (mirrors COMMAND.COM /C and INT 2Eh).
+	first_shell->RunBatchFile();
+
+	bool truncated = false;
+	auto output = MCP_ConsoleTap_ReadSince(mark, truncated);
+	return {{"ok", true},
+	        {"output", output},
+	        {"length", output.size()},
+	        {"truncated", truncated},
+	        {"exit_code", static_cast<unsigned>(dos.return_code)}};
 }
 
 nlohmann::json tool_set_speed_main_thread(const nlohmann::json& args)

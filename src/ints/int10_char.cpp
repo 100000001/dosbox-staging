@@ -28,6 +28,10 @@
 #include "pic.h"
 #include "regs.h"
 
+#if C_MCP
+#include "../mcp/mcp_console.h"
+#endif
+
 static void CGA2_CopyRow(uint8_t cleft,uint8_t cright,uint8_t rold,uint8_t rnew,PhysPt base) {
 	BIOS_CHEIGHT;
 	PhysPt dest=base+((CurMode->twidth*rnew)*(cheight/2)+cleft);
@@ -750,6 +754,13 @@ template <CallPlacement call_placement = CallPlacement::Immediate>
 static void teletype_output_attr(const uint8_t chr, const uint8_t attr,
                                  const bool useattr, const uint8_t page)
 {
+#if C_MCP
+	// Single tap point that catches both CallPlacement specialisations.
+	// `device_CON::Output` (the dominant shell-output path) reaches here
+	// via INT10_TeletypeOutputAttrViaInterrupt, and BIOS-direct callers
+	// via INT10_TeletypeOutputAttr.
+	MCP_ConsoleTap_Notify(chr);
+#endif
 	BIOS_NCOLS;
 	BIOS_NROWS;
 	uint8_t cur_row = CURSOR_POS_ROW(page);

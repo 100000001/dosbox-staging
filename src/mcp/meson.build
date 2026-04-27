@@ -1,4 +1,5 @@
 libmcp_sources = files(
+    'mcp_console.cpp',
     'mcp_screenshot.cpp',
     'mcp_server.cpp',
     'mcp_tools.cpp',
