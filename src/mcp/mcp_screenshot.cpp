@@ -170,6 +170,14 @@ void convert_row(const RenderedImage& img, int w, const uint8_t* src,
 		}
 		break;
 	}
+	default:
+		// Fail loudly rather than ship a malformed PNG built from
+		// uninitialised memory. If a new PixelFormat lands, add a
+		// branch above.
+		throw std::runtime_error(
+		        "screenshot: unhandled pixel_format (id=" +
+		        std::to_string(static_cast<int>(img.params.pixel_format)) +
+		        ")");
 	}
 }
 

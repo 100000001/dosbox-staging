@@ -38,6 +38,13 @@ void MCP_PumpQueue(void);
 // directly.
 bool MCP_IsPaused(void);
 
+// True iff MCP_Init succeeded (i.e. server bound, [mcp] mcp_enabled is
+// true, and MCP_Shutdown hasn't fired yet). Used by render.cpp to gate
+// per-frame deep_copy on whether anyone could possibly request a
+// screenshot — saves a few MB/s of allocator churn when MCP is
+// compiled in but config-disabled.
+bool MCP_IsActive(void);
+
 #ifdef __cplusplus
 }
 #endif

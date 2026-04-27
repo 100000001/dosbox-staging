@@ -9,7 +9,6 @@
 #ifndef DOSBOX_MCP_QUEUE_H
 #define DOSBOX_MCP_QUEUE_H
 
-#include <condition_variable>
 #include <functional>
 #include <future>
 #include <mutex>
@@ -40,7 +39,6 @@ public:
 			std::lock_guard<std::mutex> lock(mu_);
 			pending_.emplace(std::move(job), promise);
 		}
-		cv_.notify_one();
 		// Wake the main thread if it's parked in SDL_WaitEvent. DOSBox
 		// uses SDL_WaitEventTimeout when emulation has nothing to do
 		// (e.g. CPU at INT 16h waiting for a keystroke). Without this,
@@ -85,7 +83,6 @@ private:
 		{}
 	};
 	std::mutex mu_;
-	std::condition_variable cv_;
 	std::queue<Entry> pending_;
 };
 

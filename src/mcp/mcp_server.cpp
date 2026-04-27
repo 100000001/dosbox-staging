@@ -61,14 +61,11 @@ mcp::tool_handler make_handler(nlohmann::json (*fn)(const nlohmann::json&))
 {
 	return [fn](const nlohmann::json& args,
 	            const std::string& /*session_id*/) -> nlohmann::json {
-		nlohmann::json result;
-		try {
-			result = g_queue.submit_and_wait(
-			        [fn, args]() { return fn(args); });
-		} catch (const std::exception& e) {
-			// Re-throw so cpp-mcp marks isError=true with the message.
-			throw;
-		}
+		// Exceptions from `fn` propagate out of submit_and_wait via
+		// future.get() and bubble up to cpp-mcp, which translates
+		// them into isError=true responses.
+		auto result = g_queue.submit_and_wait(
+		        [fn, args]() { return fn(args); });
 		return nlohmann::json::array(
 		        {{{"type", "text"}, {"text", result.dump()}}});
 	};
@@ -355,4 +352,9 @@ extern "C" void MCP_PumpQueue(void)
 extern "C" bool MCP_IsPaused(void)
 {
 	return g_paused.load(std::memory_order_acquire);
+}
+
+extern "C" bool MCP_IsActive(void)
+{
+	return g_server != nullptr;
 }

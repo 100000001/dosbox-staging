@@ -28,6 +28,9 @@
 #include <mutex>
 
 #include "../capture/capture.h"
+#if C_MCP
+#include "../mcp/mcp_bridge.h"
+#endif
 #include "control.h"
 #include "fraction.h"
 #include "mapper.h"
@@ -240,7 +243,7 @@ bool RENDER_StartUpdate()
 			if (CAPTURE_IsCapturingImage() ||
 			    CAPTURE_IsCapturingVideo()
 #if C_MCP
-			    || true
+			    || MCP_IsActive()
 #endif
 			    ) {
 				render.fullFrame = true;
@@ -271,7 +274,7 @@ void RENDER_EndUpdate(bool abort)
 
 	if (CAPTURE_IsCapturingImage() || CAPTURE_IsCapturingVideo()
 #if C_MCP
-	    || true
+	    || MCP_IsActive()
 #endif
 	    ) {
 		bool double_width  = false;
